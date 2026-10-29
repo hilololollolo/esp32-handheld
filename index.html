@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ESP32 Handheld</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; font-family: system-ui, sans-serif; background:#0e0f12; color:#eee; display:flex; justify-content:center; }
+  main { width:100%; max-width:480px; padding:24px 20px; box-sizing:border-box; }
+  h1 { margin:0 0 6px; font-size:26px; }
+  p { color:#9aa0a6; margin:0 0 18px; }
+  textarea, input { width:100%; box-sizing:border-box; font-size:18px; padding:12px; border:0; border-radius:10px; background:#1c1e24; color:#fff; font-family:inherit; }
+  textarea { height:130px; resize:none; }
+  input { margin-top:10px; }
+  .count { text-align:right; color:#6b7078; font-size:13px; margin-top:4px; }
+  button { width:100%; margin-top:14px; padding:15px; font-size:18px; border:0; border-radius:10px; background:#2e9e4f; color:#fff; font-weight:600; }
+  button:disabled { background:#2a2d33; color:#777; }
+  #status { margin-top:14px; min-height:22px; color:#9aa0a6; }
+</style>
+</head>
+<body>
+<main>
+  <h1>ESP32 Handheld</h1>
+  <p>Type something and it pops up on the screen.</p>
+  <textarea id="msg" maxlength="100" placeholder="Write something..."></textarea>
+  <div class="count" id="count">0 / 100</div>
+  <input id="code" placeholder="Secret code" autocomplete="off" hidden>
+  <button id="send">Show on screen</button>
+  <div id="status"></div>
+</main>
+<script>
+  const TOPIC = "hh-7cj23jl2tjvb";      // must match WEB_TOPIC in the sketch
+  const NEEDS_CODE = false;           // true = show a code box (also set WEB_CODE in the sketch)
+  const COOLDOWN_MS = 8000;           // wait between messages
+
+  const msg = document.getElementById("msg"), code = document.getElementById("code");
+  const count = document.getElementById("count"), btn = document.getElementById("send");
+  const statusEl = document.getElementById("status");
+  if (NEEDS_CODE) code.hidden = false;
+
+  msg.addEventListener("input", () => { count.textContent = msg.value.length + " / 100"; });
+
+  function cooldown(until) {
+    btn.disabled = true;
+    const t = setInterval(() => {
+      const left = Math.ceil((until - Date.now()) / 1000);
+      if (left <= 0) { clearInterval(t); btn.disabled = false; btn.textContent = "Show on screen"; }
+      else btn.textContent = "Wait " + left + "s";
+    }, 250);
+  }
+
+  btn.addEventListener("click", async () => {
+    const text = msg.value.trim();
+    if (!text) { statusEl.textContent = "Write something first."; return; }
+    const body = (NEEDS_CODE ? code.value.trim() + "|" : "") + text;
+    btn.disabled = true; statusEl.textContent = "Sending...";
+    try {
+      const r = await fetch("https://ntfy.sh/" + TOPIC, { method: "POST", body, headers: { "Content-Type": "text/plain" } });
+      if (!r.ok) throw new Error(r.status);
+      statusEl.textContent = "Sent! It shows up on the screen in a few seconds.";
+      msg.value = ""; count.textContent = "0 / 100";
+      cooldown(Date.now() + COOLDOWN_MS);
+    } catch (e) {
+      statusEl.textContent = "Couldn't send. Check your internet and try again.";
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
